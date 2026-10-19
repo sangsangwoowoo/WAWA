@@ -1,0 +1,55 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+      
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_IP }} << 'ENDSSH'
+            # 백엔드 디렉토리로 이동
+            cd /app/backend
+            
+            # Git pull
+            git pull origin master
+            
+            # .env 파일 업데이트
+            cat > .env << 'EOF'
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          ALGORITHM=${{ secrets.ALGORITHM }}
+          ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
+          REFRESH_TOKEN_EXPIRE_DAYS=${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
+          SUPABASE_JWT_SECRET=${{ secrets.SUPABASE_JWT_SECRET }}
+          MERRIAM_WEBSTER_API_KEY=${{secrets.MERRIAM_WEBSTER_API_KEY}}
+          EOF
+            
+            # 가상환경 활성화 및 패키지 업데이트
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt || true
+            
+            # 서비스 재시작
+            sudo systemctl restart backend.service
+            
+            # 서비스 상태 확인
+            sleep 3
+            sudo systemctl status backend.service --no-pager
+          ENDSSH

@@ -1,0 +1,61 @@
+name: Deploy AI Server to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+      
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_IP }} << 'ENDSSH'
+            # AI 서버 디렉토리로 이동
+            cd /app/ai_server
+            
+            # Git pull
+            git pull origin main
+            
+            # .env 파일 업데이트
+            cd app
+            cat > .env << 'EOF'
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
+          ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }}
+          ENVIRONMENT=production
+          DEBUG=false
+          HOST=0.0.0.0
+          PORT=8000
+          OPENAI_MODEL=gpt-4
+          OPENAI_TEMPERATURE=0.7
+          OPENAI_MAX_TOKENS=1000
+          LOG_LEVEL=INFO
+          DATABASE_URL=sqlite:///./language_learning.db
+          EOF
+            
+            # 가상환경 활성화 및 패키지 업데이트
+            cd /app/ai_server
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt || true
+            
+            # 서비스 재시작
+            sudo systemctl restart ai.service
+            
+            # 서비스 상태 확인
+            sleep 3
+            sudo systemctl status ai.service --no-pager
+          ENDSSH

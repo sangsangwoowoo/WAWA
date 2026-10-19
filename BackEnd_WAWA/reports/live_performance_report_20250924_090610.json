@@ -1,0 +1,54 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-09-24T09:06:10.702520"
+  },
+  "overall_summary": {
+    "total_functions_measured": 3,
+    "total_calls_recorded": 7
+  },
+  "function_performance_results": {
+    "로그인": {
+      "status": "개선필요",
+      "avg_execution_time_ms": 1951.54,
+      "min_execution_time_ms": 1951.54,
+      "max_execution_time_ms": 1951.54,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "프로필 조회": {
+      "status": "보통",
+      "avg_execution_time_ms": 416.42,
+      "min_execution_time_ms": 367.73,
+      "max_execution_time_ms": 486.54,
+      "call_count": 4,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "학습 계획 생성": {
+      "status": "개선필요",
+      "avg_execution_time_ms": 881.71,
+      "min_execution_time_ms": 795.02,
+      "max_execution_time_ms": 968.41,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-08T01:25:58.288164"
+  },
+  "overall_summary": {
+    "total_functions_measured": 5,
+    "total_calls_recorded": 42
+  },
+  "function_performance_results": {
+    "학습 로그 추가": {
+      "status": "양호",
+      "avg_execution_time_ms": 214.0,
+      "min_execution_time_ms": 108.31,
+      "max_execution_time_ms": 636.94,
+      "call_count": 9,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "일일 피드백 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 66.22,
+      "min_execution_time_ms": 38.44,
+      "max_execution_time_ms": 91.49,
+      "call_count": 7,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "오늘의 진행률 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 73.44,
+      "min_execution_time_ms": 49.01,
+      "max_execution_time_ms": 106.28,
+      "call_count": 7,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "프로필 조회": {
+      "status": "양호",
+      "avg_execution_time_ms": 337.81,
+      "min_execution_time_ms": 168.67,
+      "max_execution_time_ms": 571.94,
+      "call_count": 15,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "로그인": {
+      "status": "보통",
+      "avg_execution_time_ms": 789.38,
+      "min_execution_time_ms": 300.22,
+      "max_execution_time_ms": 1010.73,
+      "call_count": 4,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

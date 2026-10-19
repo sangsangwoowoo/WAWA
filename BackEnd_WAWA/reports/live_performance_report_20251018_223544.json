@@ -1,0 +1,96 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-18T22:35:44.723530"
+  },
+  "overall_summary": {
+    "total_functions_measured": 6,
+    "total_calls_recorded": 56
+  },
+  "function_performance_results": {
+    "오늘의 진행률 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 62.52,
+      "min_execution_time_ms": 36.16,
+      "max_execution_time_ms": 121.47,
+      "call_count": 12,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "프로필 조회": {
+      "status": "양호",
+      "avg_execution_time_ms": 258.67,
+      "min_execution_time_ms": 99.69,
+      "max_execution_time_ms": 938.93,
+      "call_count": 23,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "일일 피드백 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 86.99,
+      "min_execution_time_ms": 43.51,
+      "max_execution_time_ms": 345.4,
+      "call_count": 12,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "소셜 로그인 URL 생성": {
+      "status": "우수",
+      "avg_execution_time_ms": 3.95,
+      "min_execution_time_ms": 1.39,
+      "max_execution_time_ms": 7.73,
+      "call_count": 6,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "템플릿으로 학습 계획 생성": {
+      "status": "보통",
+      "avg_execution_time_ms": 621.87,
+      "min_execution_time_ms": 489.61,
+      "max_execution_time_ms": 754.13,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "학습 계획 수정": {
+      "status": "양호",
+      "avg_execution_time_ms": 224.83,
+      "min_execution_time_ms": 224.83,
+      "max_execution_time_ms": 224.83,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

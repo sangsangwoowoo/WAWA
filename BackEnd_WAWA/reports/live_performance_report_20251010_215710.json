@@ -1,0 +1,82 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-10T21:57:10.654398"
+  },
+  "overall_summary": {
+    "total_functions_measured": 5,
+    "total_calls_recorded": 17
+  },
+  "function_performance_results": {
+    "소셜 로그인 URL 생성": {
+      "status": "우수",
+      "avg_execution_time_ms": 3.95,
+      "min_execution_time_ms": 0.72,
+      "max_execution_time_ms": 7.18,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "프로필 조회": {
+      "status": "보통",
+      "avg_execution_time_ms": 595.03,
+      "min_execution_time_ms": 375.67,
+      "max_execution_time_ms": 729.95,
+      "call_count": 6,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "일일 피드백 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 130.52,
+      "min_execution_time_ms": 84.32,
+      "max_execution_time_ms": 226.72,
+      "call_count": 4,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "오늘의 진행률 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 141.53,
+      "min_execution_time_ms": 83.97,
+      "max_execution_time_ms": 269.17,
+      "call_count": 4,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "학습 로그 추가": {
+      "status": "양호",
+      "avg_execution_time_ms": 279.51,
+      "min_execution_time_ms": 279.51,
+      "max_execution_time_ms": 279.51,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

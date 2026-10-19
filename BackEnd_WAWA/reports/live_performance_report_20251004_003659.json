@@ -1,0 +1,124 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-04T00:36:59.778387"
+  },
+  "overall_summary": {
+    "total_functions_measured": 8,
+    "total_calls_recorded": 35
+  },
+  "function_performance_results": {
+    "캐릭터 설정 업데이트": {
+      "status": "우수",
+      "avg_execution_time_ms": 144.25,
+      "min_execution_time_ms": 83.86,
+      "max_execution_time_ms": 259.76,
+      "call_count": 4,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "통계 계산": {
+      "status": "개선필요",
+      "avg_execution_time_ms": 131.74,
+      "min_execution_time_ms": 66.2,
+      "max_execution_time_ms": 358.65,
+      "call_count": 6,
+      "type": "CPU Bound",
+      "benchmark_ms": {
+        "excellent": 1,
+        "good": 5,
+        "fair": 10,
+        "poor": 20
+      }
+    },
+    "프로필 조회": {
+      "status": "양호",
+      "avg_execution_time_ms": 303.35,
+      "min_execution_time_ms": 161.77,
+      "max_execution_time_ms": 690.12,
+      "call_count": 15,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "회원가입": {
+      "status": "보통",
+      "avg_execution_time_ms": 696.92,
+      "min_execution_time_ms": 696.92,
+      "max_execution_time_ms": 696.92,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "로그인": {
+      "status": "양호",
+      "avg_execution_time_ms": 381.42,
+      "min_execution_time_ms": 375.95,
+      "max_execution_time_ms": 386.89,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "평가 레벨 업데이트": {
+      "status": "우수",
+      "avg_execution_time_ms": 133.32,
+      "min_execution_time_ms": 100.39,
+      "max_execution_time_ms": 166.25,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "학습 계획 생성": {
+      "status": "보통",
+      "avg_execution_time_ms": 459.73,
+      "min_execution_time_ms": 396.57,
+      "max_execution_time_ms": 522.9,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "언어 설정 업데이트": {
+      "status": "우수",
+      "avg_execution_time_ms": 108.81,
+      "min_execution_time_ms": 95.89,
+      "max_execution_time_ms": 127.94,
+      "call_count": 3,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

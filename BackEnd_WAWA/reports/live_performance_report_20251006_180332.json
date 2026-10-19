@@ -1,0 +1,82 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-06T18:03:32.318746"
+  },
+  "overall_summary": {
+    "total_functions_measured": 5,
+    "total_calls_recorded": 13
+  },
+  "function_performance_results": {
+    "로그인": {
+      "status": "개선필요",
+      "avg_execution_time_ms": 926.61,
+      "min_execution_time_ms": 449.57,
+      "max_execution_time_ms": 1403.65,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "프로필 조회": {
+      "status": "양호",
+      "avg_execution_time_ms": 202.99,
+      "min_execution_time_ms": 165.37,
+      "max_execution_time_ms": 252.25,
+      "call_count": 5,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "오늘의 피드백 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 59.19,
+      "min_execution_time_ms": 54.62,
+      "max_execution_time_ms": 63.77,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "오늘의 진행률 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 48.25,
+      "min_execution_time_ms": 44.48,
+      "max_execution_time_ms": 52.01,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "통계 계산": {
+      "status": "개선필요",
+      "avg_execution_time_ms": 307.94,
+      "min_execution_time_ms": 144.65,
+      "max_execution_time_ms": 471.23,
+      "call_count": 2,
+      "type": "CPU Bound",
+      "benchmark_ms": {
+        "excellent": 1,
+        "good": 5,
+        "fair": 10,
+        "poor": 20
+      }
+    }
+  }
+}

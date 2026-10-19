@@ -1,0 +1,90 @@
+name: learning_app
+description: A Korean learning Flutter application.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  http: ^1.2.1
+  shared_preferences: ^2.2.3 # 로그인 토큰 저장을 위한 패키지
+  provider: ^6.1.2           # (선택사항) 더 나은 상태관리를 위해 추천
+  translator: ^1.0.3+1
+  table_calendar: ^3.2.0
+  flutter_sound: ^9.2.13
+  permission_handler: ^11.3.1 # 마이크, 저장소 등 권한 관리
+  path_provider: ^2.1.3      # 앱의 파일 시스템 경로 접근
+  audioplayers: ^6.0.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  uuid: ^4.5.1
+  flutter_tts: ^4.2.3
+  timeago: ^3.7.1
+  image_picker: ^1.0.4
+  url_launcher: ^6.2.6
+  app_links: ^6.1.1
+  flutter_localizations:
+    sdk: flutter
+  flutter_markdown: ^0.7.7+1
+  flutter_dotenv: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  hive_generator: ^2.0.0
+  build_runner: ^2.3.3
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/fox.png
+    - assets/all.png
+    - assets/owl.png
+    - assets/cat.png
+    - assets/bear.png
+    - assets/vocabulary.png
+    - assets/conversation.png
+    - assets/study.png
+    - assets/community.png
+    - assets/bookmark.png
+    - assets/airport.png
+    - assets/restaurant.png
+    - assets/road.png
+    - assets/hotel.png
+    - assets/words_alpha.txt
+    - assets/TOEIC:TOEFL.txt
+    - assets/tatoeba_eng_50k.txt
+    - assets/google.png
+    - assets/kakao.png
+    - assets/item_starbucks_americano.png
+    - assets/item_banana_milk.png
+    - assets/item_bhc_ppuring.png
+    - assets/item_cgv_movie.png
+    - assets/item_condition.png
+    - assets/item_cu_5000.png
+    - assets/item_domino_potato.png
+    - assets/item_emart_10000.png
+    - assets/item_emart_30000.png
+    - assets/item_megabox_movie.png
+    - assets/item_momstouch_thigh.png
+    - assets/item_olive_10000.png
+    - assets/item_olive_30000.png
+    - assets/item_paris.png
+    - assets/item_starbucks_latte.png
+    - assets/item_together.png
+    - assets/item_twosome_cake.png
+    - assets/item_vita500.png
+
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/all.png"
+  min_sdk_android: 21

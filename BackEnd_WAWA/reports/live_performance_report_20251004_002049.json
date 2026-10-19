@@ -1,0 +1,82 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-04T00:20:49.033559"
+  },
+  "overall_summary": {
+    "total_functions_measured": 5,
+    "total_calls_recorded": 8
+  },
+  "function_performance_results": {
+    "회원가입": {
+      "status": "보통",
+      "avg_execution_time_ms": 541.44,
+      "min_execution_time_ms": 541.44,
+      "max_execution_time_ms": 541.44,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "로그인": {
+      "status": "양호",
+      "avg_execution_time_ms": 312.96,
+      "min_execution_time_ms": 312.96,
+      "max_execution_time_ms": 312.96,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "프로필 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 168.8,
+      "min_execution_time_ms": 146.84,
+      "max_execution_time_ms": 181.49,
+      "call_count": 3,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "평가 레벨 업데이트": {
+      "status": "우수",
+      "avg_execution_time_ms": 88.97,
+      "min_execution_time_ms": 87.14,
+      "max_execution_time_ms": 90.8,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "학습 계획 생성": {
+      "status": "양호",
+      "avg_execution_time_ms": 383.74,
+      "min_execution_time_ms": 383.74,
+      "max_execution_time_ms": 383.74,
+      "call_count": 1,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

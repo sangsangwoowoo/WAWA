@@ -1,0 +1,68 @@
+{
+  "test_metadata": {
+    "test_name": "Live Backend Non-AI Performance Report",
+    "generated_at": "2025-10-06T18:11:25.521963"
+  },
+  "overall_summary": {
+    "total_functions_measured": 4,
+    "total_calls_recorded": 10
+  },
+  "function_performance_results": {
+    "프로필 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 141.46,
+      "min_execution_time_ms": 87.5,
+      "max_execution_time_ms": 202.2,
+      "call_count": 4,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "템플릿으로 학습 계획 생성": {
+      "status": "보통",
+      "avg_execution_time_ms": 449.65,
+      "min_execution_time_ms": 385.1,
+      "max_execution_time_ms": 514.2,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "오늘의 진행률 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 47.24,
+      "min_execution_time_ms": 39.68,
+      "max_execution_time_ms": 54.8,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    },
+    "오늘의 피드백 조회": {
+      "status": "우수",
+      "avg_execution_time_ms": 53.47,
+      "min_execution_time_ms": 30.78,
+      "max_execution_time_ms": 76.17,
+      "call_count": 2,
+      "type": "Database I/O Bound",
+      "benchmark_ms": {
+        "excellent": 200,
+        "good": 400,
+        "fair": 800,
+        "poor": 1000
+      }
+    }
+  }
+}

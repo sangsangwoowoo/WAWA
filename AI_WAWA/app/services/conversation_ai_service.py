@@ -1,0 +1,1263 @@
+# app/services/conversation_ai_service.py
+# OpenAI GPT-4와 기존 시나리오를 통합한 향상된 대화 서비스 (데이터 수집 포함)
+
+import json
+import random
+import re
+import time
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+import logging
+
+# OpenAI 서비스 임포트
+from app.services.openai_service import openai_service
+
+# 데이터 수집기 임포트
+from app.services.conversation_data_collector import data_collector
+
+
+logger = logging.getLogger(__name__)
+
+class EnhancedConversationService:
+    """OpenAI GPT-4와 시나리오를 통합한 향상된 대화 서비스 (데이터 수집 포함)"""
+
+    def __init__(self):
+        # 데이터 수집기 초기화
+        self.data_collector = data_collector
+        self.response_start_times = {}  # 응답 시간 측정용
+
+        # 기존 시스템 초기화
+        self.conversation_scenarios = {}
+        self.current_scenarios = {}  # session_id별 현재 시나리오
+        self.openai_sessions = {}   # OpenAI 전용 세션들
+        self.load_collected_data()
+
+        # 대화 모드
+        self.SCENARIO_MODE = "scenario"    # 기존 시나리오 기반
+        self.OPENAI_MODE = "openai"       # OpenAI GPT-4 기반
+        self.HYBRID_MODE = "hybrid"       # 혼합 모드
+
+        logger.info("대화 서비스 초기화 완료 (데이터 수집 포함)")
+
+    def load_collected_data(self):
+        """수집된 대화 데이터를 시나리오로 변환"""
+
+        try:
+            # 수집한 JSON 파일 읽기 (여러 경로 시도)
+            json_filename = 'free_travel_conversations_en_20250722_161841.json'
+            possible_paths = [
+                json_filename,  # 현재 폴더
+                f'../{json_filename}',  # 상위 폴더
+                f'../../{json_filename}',  # 2단계 상위 폴더
+            ]
+
+            data = None
+            for json_path in possible_paths:
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        logger.info(f"JSON 파일 로드 성공: {json_path}")
+                        break
+                except FileNotFoundError:
+                    continue
+
+            if data is None:
+                logger.warning(f"수집된 대화 파일을 찾을 수 없음. 기본 시나리오만 사용")
+                self._add_default_scenarios()
+                return
+
+            logger.info(f"JSON 파일 구조: {list(data.keys())}")
+
+            # JSON 구조 확인 및 대화 데이터 추출
+            conversations = []
+            if 'conversations' in data:
+                conversations = data['conversations']
+            elif isinstance(data, list):
+                conversations = data
+            else:
+                # 다른 구조일 경우 키 확인
+                for key in data.keys():
+                    if isinstance(data[key], list):
+                        conversations = data[key]
+                        break
+
+            logger.info(f"추출된 대화 수: {len(conversations)}")
+
+            # 상황별로 대화 시나리오 분류
+            for i, conversation in enumerate(conversations):
+                try:
+                    # 상황 추출 (다양한 키 이름 대응)
+                    situation = None
+                    for key in ['situation', 'context', 'scenario', 'scene', 'setting']:
+                        if key in conversation:
+                            situation = conversation[key].lower()
+                            break
+
+                    if not situation:
+                        # 대화 내용에서 상황 추정
+                        dialogue_text = str(conversation.get('dialogue', ''))
+                        situation = self._infer_situation_from_text(dialogue_text)
+
+                    if situation not in self.conversation_scenarios:
+                        self.conversation_scenarios[situation] = {
+                            'dialogues': [],
+                            'common_phrases': [],
+                            'scenarios': []
+                        }
+
+                    # 실제 대화를 시나리오로 변환
+                    dialogue_text = conversation.get('dialogue', '') or conversation.get('text', '') or str(conversation)
+                    scenario = self._extract_scenario_from_dialogue(dialogue_text, situation)
+
+                    if scenario:
+                        self.conversation_scenarios[situation]['scenarios'].append(scenario)
+                        logger.debug(f"시나리오 추가: {situation} - {len(scenario.get('key_phrases', []))}개 핵심 표현")
+
+                except Exception as e:
+                    logger.warning(f"대화 {i} 처리 중 오류: {e}")
+                    continue
+
+            # 기본 시나리오 추가 (데이터 없을 때 대비)
+            self._add_default_scenarios()
+
+            # 결과 로깅
+            for situation, data in self.conversation_scenarios.items():
+                scenario_count = len(data['scenarios'])
+                logger.info(f"✅ {situation}: {scenario_count}개 시나리오 로드됨")
+
+        except FileNotFoundError:
+            logger.warning("수집된 대화 파일을 찾을 수 없음. 기본 시나리오만 사용")
+            self._add_default_scenarios()
+        except Exception as e:
+            logger.error(f"데이터 로드 오류: {e}")
+            self._add_default_scenarios()
+
+    async def start_conversation(
+            self,
+            session_id: str,
+            situation: str,
+            difficulty: str = "beginner",
+            language: str = "en",
+            mode: str = "auto",
+            user_id: str = None,  # 데이터 수집을 위한 user_id 추가
+            translate: bool = False
+    ) -> Dict[str, Any]:
+        """새로운 대화 세션 시작 (데이터 수집 포함)"""
+
+        if situation not in self.conversation_scenarios:
+            return {
+                "success": False,
+                "error": f"지원하지 않는 상황: {situation}"
+            }
+
+        try:
+            # 모드 자동 선택
+            if mode == "auto":
+                # OpenAI 사용 가능하면 hybrid, 아니면 scenario
+                mode = "hybrid" if openai_service and openai_service.client else "scenario"
+
+            # 세션 설정
+            session_config = {
+                'situation': situation,
+                'difficulty': difficulty,
+                'language': language,
+                'mode': mode,
+                'user_id': user_id,
+                'started_at': datetime.now().isoformat(),
+                'turn_count': 0,
+                'translate': translate
+            }
+
+            # 데이터 수집: 세션 시작 기록
+            if user_id and self.data_collector:
+                await self.data_collector.start_session(
+                    session_id=session_id,
+                    user_id=user_id,
+                    situation=situation,
+                    user_level=difficulty,
+                    mode=mode
+                )
+                logger.debug(f"데이터 수집 세션 시작: {session_id}")
+
+                if (mode == "openai" or mode == "hybrid") and openai_service:
+                    self.openai_sessions[session_id] = session_config
+
+                # 1. 번역 요청 여부에 따라 translate_to 언어 코드 설정
+                translate_to = 'ko' if translate else None
+
+                # 2. openai_service를 호출하여 원문과 번역문을 함께 받음
+                intro_result = await openai_service.generate_scenario_intro(
+                    situation=situation,
+                    language=language,
+                    difficulty=difficulty,
+                    translate_to=translate_to
+                )
+
+                # 3. Flutter 앱이 기대하는 {"success": ..., "data": {...}} 구조로 응답 반환
+                return {
+                    "success": True,
+                    "data": {
+                        "session_id": session_id,
+                        "ai_message": intro_result['original'],
+                        "translated_text": intro_result['translated'],
+                        "mode": mode,
+                        "scenario_title": f"AI-Powered {situation.title()} Conversation",
+                        "features": ["intelligent_responses", "contextual_feedback"],
+                        "data_collection": bool(user_id and self.data_collector)
+                    }
+                }
+
+            else:
+                scenario_result = await self._start_scenario_mode(session_id, situation, difficulty, language)
+                if scenario_result.get("success"):
+                    return {
+                        "success": True,
+                        "data": scenario_result # _start_scenario_mode가 반환하는 내용을 그대로 data에 담음
+                    }
+                else:
+                    return scenario_result # 실패 시에는 그대로 반환
+
+        except Exception as e:
+            logger.error(f"대화 시작 오류: {e}")
+            return {
+                "success": False,
+                "error": f"대화 시작 중 오류: {str(e)}"
+            }
+
+    async def process_user_response(
+            self,
+            session_id: str,
+            user_message: str,
+            translate: bool = False # 👈 [FIX] Add 'translate' parameter here
+    ) -> Dict[str, Any]:
+        """사용자 메시지 처리 (데이터 수집 포함)"""
+
+        # 음성 인식 결과가 비어있거나 너무 짧으면, 한국어로 말한 것으로 간주하고 구체적인 오류 메시지 반환
+        if not user_message or len(user_message.strip()) < 2:
+            session_config = self.openai_sessions.get(session_id) or self.current_scenarios.get(session_id)
+            target_language_code = session_config.get('language', 'en') if session_config else 'en'
+
+            # 언어 코드에 맞는 표시 이름 찾기
+            lang_map = {'en': '영어', 'ja': '일본어', 'zh': '중국어', 'fr': '프랑스어', 'ko': '한국어'}
+            target_language_name = lang_map.get(target_language_code, '학습 언어')
+
+            # 학습 언어가 한국어가 아닌데, 음성 인식이 실패한 경우
+            if target_language_code != 'ko':
+                return {
+                    "success": False,
+                    "error": f"음성을 인식하지 못했습니다. 학습 언어({target_language_name})로 말씀해주세요."
+                }
+
+        # 응답 시간 측정 시작
+        start_time = time.time()
+        self.response_start_times[session_id] = start_time
+
+        try:
+            # OpenAI 세션인지 확인
+            if session_id in self.openai_sessions:
+                # 👈 [FIX] Pass the 'translate' flag down to the next function
+                result = await self._process_openai_message(session_id, user_message, translate=translate)
+
+            # 시나리오 세션인지 확인
+            elif session_id in self.current_scenarios:
+                result = await self._process_scenario_message(session_id, user_message)
+
+            else:
+                return {
+                    "success": False,
+                    "error": "활성 세션이 없습니다. 먼저 대화를 시작해주세요."
+                }
+
+            # 데이터 수집
+            if result["success"] and self.data_collector:
+                await self._log_conversation_data(session_id, user_message, result, start_time)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"메시지 처리 오류: {e}")
+            return {
+                "success": False,
+                "error": f"메시지 처리 중 오류: {str(e)}"
+            }
+
+    async def _log_conversation_data(
+            self,
+            session_id: str,
+            user_message: str,
+            ai_result: Dict,
+            start_time: float
+    ):
+        """대화 데이터 로깅"""
+
+        try:
+            # 세션 정보 가져오기
+            session_config = self.openai_sessions.get(session_id) or self.current_scenarios.get(session_id)
+            if not session_config:
+                return
+
+            # 응답 시간 계산
+            response_time_ms = (time.time() - start_time) * 1000
+
+            # 턴 인덱스 계산
+            turn_index = session_config.get('turn_count', 0)
+            session_config['turn_count'] = turn_index + 1
+
+            # 컨텍스트 데이터 준비
+            context_data = {
+                'mode': ai_result.get('mode', session_config.get('mode')),
+                'tokens_used': ai_result.get('tokens_used', 0),
+                'model': ai_result.get('model', 'unknown'),
+                'feedback': ai_result.get('feedback', {}),
+                'completed': ai_result.get('completed', False),
+                'step': ai_result.get('step', 0),
+                'total_steps': ai_result.get('total_steps', 0)
+            }
+
+            # 데이터 수집기에 로깅
+            await self.data_collector.log_conversation_turn(
+                session_id=session_id,
+                turn_index=turn_index,
+                situation=session_config.get('situation', 'unknown'),
+                user_level=session_config.get('difficulty', 'beginner'),
+                user_message=user_message,
+                ai_response=ai_result.get('ai_message', ''),
+                response_mode=ai_result.get('mode', session_config.get('mode')),
+                response_time_ms=response_time_ms,
+                context_data=context_data
+            )
+
+            logger.debug(f"💾 대화 데이터 저장: {session_id}#{turn_index}")
+
+        except Exception as e:
+            logger.error(f"대화 데이터 로깅 오류: {e}")
+
+    async def _process_openai_message(
+            self,
+            session_id: str,
+            user_message: str,
+            translate: bool = False  # 👈 앱으로부터 번역 요청 플래그를 받음
+    ) -> Dict[str, Any]:
+        """OpenAI 모드 메시지 처리 (번역 기능 추가)"""
+
+        try:
+            session_config = self.openai_sessions[session_id]
+
+            # translate 플래그가 True이면, 번역 언어를 'ko'로 설정
+            translate_to = 'ko' if translate else None
+
+            # GPT-4로 응답 생성 (번역 요청 포함)
+            ai_result = await openai_service.generate_ai_response(
+                session_id=session_id,
+                user_message=user_message,
+                situation=session_config['situation'],
+                language=session_config['language'],
+                difficulty=session_config['difficulty'],
+                translate_to=translate_to # 👈 openai_service로 번역 언어 전달
+            )
+
+            if ai_result["success"]:
+                # (이전의 구분자 후처리 로직은 그대로 유지됩니다)
+                raw_message = ai_result.get("ai_message", "")
+                official_separator = '\n\n======== Recommended ========\n\n'
+                pattern = re.compile(r'^\s*={5,}\s*Recommended\s*={5,}\s*$|^\s*={10,}\s*$', re.MULTILINE)
+                processed_message, num_replacements = pattern.subn(official_separator, raw_message)
+                if num_replacements > 0:
+                    ai_result["ai_message"] = processed_message.strip()
+
+                # 턴 카운트 증가
+                session_config['turn_count'] += 1
+
+                return {
+                    "success": True,
+                    "mode": session_config['mode'],
+                    "ai_message": ai_result["ai_message"],
+                    "translated_text": ai_result.get("translated_text"), # 번역 결과 포함
+                    "feedback": ai_result["feedback"],
+                    "turn_count": session_config['turn_count'],
+                    "tokens_used": ai_result.get("tokens_used", 0),
+                    "model": ai_result.get("model", "gpt-4"),
+                    "completed": False
+                }
+            else:
+                if ai_result.get("fallback"):
+                    logger.warning(f"OpenAI 실패, 시나리오 모드로 폴백: {session_id}")
+                    return await self._fallback_to_scenario(session_id, user_message)
+                else:
+                    return ai_result
+
+        except Exception as e:
+            logger.error(f"OpenAI 메시지 처리 오류: {e}")
+            return {
+                "success": False,
+                "error": f"메시지 처리 중 오류: {str(e)}"
+            }
+
+    async def _process_scenario_message(
+            self,
+            session_id: str,
+            user_message: str
+    ) -> Dict[str, Any]:
+        """시나리오 모드 메시지 처리 (기존 로직)"""
+
+        scenario_data = self.current_scenarios[session_id]
+        current_step = scenario_data['current_step']
+        scenario = scenario_data['scenario']
+
+        # 현재 단계의 기대 응답과 비교
+        if current_step < len(scenario['steps']):
+            step_data = scenario['steps'][current_step]
+
+            # 응답 분석
+            feedback = self._analyze_user_response(
+                user_message,
+                step_data['expected_responses'],
+                step_data['feedback_tips']
+            )
+
+            # 사용자 응답 기록
+            scenario_data['user_responses'].append({
+                'step': current_step + 1,
+                'user_message': user_message,
+                'feedback': feedback,
+                'timestamp': datetime.now().isoformat()
+            })
+
+            # 다음 단계로 진행
+            scenario_data['current_step'] += 1
+            next_step = scenario_data['current_step']
+
+            if next_step < len(scenario['steps']):
+                # 다음 단계가 있는 경우
+                next_step_data = scenario['steps'][next_step]
+                return {
+                    "success": True,
+                    "mode": self.SCENARIO_MODE,
+                    "feedback": feedback,
+                    "ai_message": next_step_data['ai_message'],
+                    "expected_responses": next_step_data['expected_responses'],
+                    "step": next_step + 1,
+                    "total_steps": len(scenario['steps']),
+                    "completed": False
+                }
+            else:
+                # 시나리오 완료
+                return {
+                    "success": True,
+                    "mode": self.SCENARIO_MODE,
+                    "feedback": feedback,
+                    "ai_message": "Great job! You've completed this scenario. Would you like to try another one?",
+                    "completed": True,
+                    "summary": self._generate_scenario_summary(scenario_data)
+                }
+
+        return {
+            "success": False,
+            "error": "시나리오가 이미 완료되었습니다."
+        }
+
+    async def _fallback_to_scenario(
+            self,
+            session_id: str,
+            user_message: str
+    ) -> Dict[str, Any]:
+        """OpenAI 실패시 시나리오 모드로 폴백"""
+
+        try:
+            session_config = self.openai_sessions[session_id]
+
+            # 시나리오 모드로 전환
+            scenario_session_id = f"{session_id}_fallback"
+
+            # 시나리오 시작
+            result = await self._start_scenario_mode(
+                session_id=scenario_session_id,
+                situation=session_config['situation'],
+                difficulty=session_config['difficulty'],
+                language=session_config['language']
+            )
+
+            if result["success"]:
+                # 원래 세션 정리
+                del self.openai_sessions[session_id]
+
+                return {
+                    "success": True,
+                    "mode": "fallback_scenario",
+                    "ai_message": result["first_message"],
+                    "message": "시나리오 모드로 전환되었습니다.",
+                    "new_session_id": scenario_session_id
+                }
+            else:
+                return result
+
+        except Exception as e:
+            logger.error(f"폴백 처리 오류: {e}")
+            return {
+                "success": False,
+                "error": "폴백 처리 중 오류가 발생했습니다."
+            }
+
+    async def _start_scenario_mode(
+            self,
+            session_id: str,
+            situation: str,
+            difficulty: str,
+            language: str
+    ) -> Dict[str, Any]:
+        """기존 시나리오 모드로 대화 시작"""
+
+        # 난이도에 맞는 시나리오 선택
+        scenarios = self.conversation_scenarios[situation]['scenarios']
+
+        if not scenarios:
+            scenario = self._get_default_scenario(situation, difficulty)
+        else:
+            scenario = random.choice(scenarios)
+
+        # 시나리오 구조화
+        structured_scenario = self._create_scenario_structure(scenario, situation, difficulty, language)
+
+        # 세션에 저장
+        self.current_scenarios[session_id] = {
+            'situation': situation,
+            'difficulty': difficulty,
+            'language': language,
+            'mode': self.SCENARIO_MODE,
+            'scenario': structured_scenario,
+            'current_step': 0,
+            'user_responses': [],
+            'started_at': datetime.now().isoformat()
+        }
+
+        return {
+            "success": True,
+            "mode": self.SCENARIO_MODE,
+            "session_id": session_id,
+            "scenario_title": structured_scenario['title'],
+            "first_message": structured_scenario['steps'][0]['ai_message'],
+            "expected_responses": structured_scenario['steps'][0]['expected_responses'],
+            "data_collection": bool(self.data_collector)
+        }
+
+    def start_scenario(
+            self,
+            session_id: str,
+            situation: str,
+            difficulty: str = "beginner"
+    ) -> Dict[str, Any]:
+        """기존 API 호환성을 위한 동기 버전"""
+
+        # 비동기 버전을 동기로 래핑
+        import asyncio
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(
+            self.start_conversation(session_id, situation, difficulty, "en", "auto")
+        )
+
+    def _get_scenario_context(self, situation: str) -> Dict[str, Any]:
+        """상황별 시나리오 컨텍스트 추출"""
+
+        scenarios = self.conversation_scenarios.get(situation, {}).get('scenarios', [])
+
+        if not scenarios:
+            return {"phrases": [], "topics": [], "scenario_count": 0}
+
+        # 핵심 표현 수집
+        all_phrases = []
+        for scenario in scenarios[:10]:  # 최대 10개 시나리오에서 추출
+            phrases = scenario.get('key_phrases', [])
+            all_phrases.extend(phrases)
+
+        # 중복 제거 및 상위 표현 선택
+        unique_phrases = list(set(all_phrases))[:15]
+
+        # 주요 주제 추출
+        topics = [f"{situation} conversation", f"{situation} vocabulary", f"{situation} situations"]
+
+        return {
+            "phrases": unique_phrases,
+            "topics": topics,
+            "scenario_count": len(scenarios)
+        }
+
+    def _infer_situation_from_text(self, text: str) -> str:
+        """텍스트에서 상황 추정"""
+        text_lower = text.lower()
+
+        if any(word in text_lower for word in ['airport', 'flight', 'boarding', 'check-in', 'gate', 'passport']):
+            return 'airport'
+        elif any(word in text_lower for word in ['restaurant', 'menu', 'order', 'table', 'waiter', 'food']):
+            return 'restaurant'
+        elif any(word in text_lower for word in ['hotel', 'room', 'reception', 'key', 'lobby', 'booking']):
+            return 'hotel'
+        elif any(word in text_lower for word in ['street', 'direction', 'way', 'map', 'lost', 'bus', 'subway']):
+            return 'street'
+        else:
+            return 'general'
+
+    def _extract_scenario_from_dialogue(self, dialogue_text: str, situation: str) -> Optional[Dict]:
+        """실제 대화에서 시나리오 패턴 추출"""
+
+        if not dialogue_text or len(dialogue_text.strip()) < 10:
+            return None
+
+        # 대화에서 주요 패턴 찾기
+        patterns = {
+            'airport': [
+                r'check.?in|boarding|gate|flight|passport|luggage',
+                r'departure|arrival|security|terminal|customs'
+            ],
+            'restaurant': [
+                r'menu|order|food|table|reservation|bill',
+                r'waiter|server|chef|meal|dish|drink'
+            ],
+            'hotel': [
+                r'room|key|reception|check.?in|check.?out',
+                r'service|wifi|breakfast|lobby|concierge'
+            ],
+            'street': [
+                r'direction|way|map|lost|help|street',
+                r'bus|subway|taxi|walk|turn|block'
+            ]
+        }
+
+        situation_patterns = patterns.get(situation, [])
+
+        # 패턴 매칭으로 관련도 확인
+        relevance_score = 0
+        for pattern in situation_patterns:
+            matches = len(re.findall(pattern, dialogue_text.lower()))
+            relevance_score += matches
+
+        # 최소 관련도 기준 완화
+        if relevance_score >= 0:  # 0 이상이면 포함
+            return {
+                'dialogue': dialogue_text[:500],  # 처음 500자만
+                'relevance_score': max(relevance_score, 1),  # 최소 1점
+                'key_phrases': self._extract_key_phrases(dialogue_text, situation),
+                'difficulty': 'intermediate'  # 기본값
+            }
+
+        return None
+
+    def _extract_key_phrases(self, text: str, situation: str) -> List[str]:
+        """대화에서 핵심 표현 추출"""
+
+        key_phrase_patterns = {
+            'airport': [
+                'check in', 'boarding pass', 'gate number', 'departure time',
+                'passport please', 'luggage weight', 'window seat', 'aisle seat'
+            ],
+            'restaurant': [
+                'table for', 'can I see the menu', 'I would like', 'check please',
+                'is it spicy', 'what do you recommend', 'bill please', 'tip included'
+            ],
+            'hotel': [
+                'reservation', 'room key', 'wifi password', 'checkout time',
+                'room service', 'wake up call', 'extra towels', 'front desk'
+            ],
+            'street': [
+                'how do I get to', 'where is', 'excuse me', 'turn left',
+                'straight ahead', 'next to', 'across from', 'thank you'
+            ]
+        }
+
+        phrases = key_phrase_patterns.get(situation, [])
+        found_phrases = []
+
+        for phrase in phrases:
+            if phrase.lower() in text.lower():
+                found_phrases.append(phrase)
+
+        return found_phrases[:5]  # 최대 5개
+
+    def _create_scenario_structure(self, base_scenario: Dict, situation: str, difficulty: str, language: str = "en") -> Dict:
+        """언어별 시나리오 구조 생성"""
+
+        # 언어별 시나리오 템플릿
+        scenario_templates = {
+            'ko': {
+                'airport': {
+                    'title': '공항 체크인',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '안녕하세요! 인천공항에 오신 것을 환영합니다. 무엇을 도와드릴까요?',
+                            'expected_responses': ['체크인', '비행기', '도움', '탑승', 'check in'],
+                            'feedback_tips': '이렇게 말해보세요: "체크인 하고 싶어요" 또는 "Check-in please"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '여권과 항공표를 보여주세요.',
+                            'expected_responses': ['여기', '네', '드려요', '확인', 'here'],
+                            'feedback_tips': '정중하게 답하기: "네, 여기 있어요" 또는 "Here you are"'
+                        }
+                    ]
+                },
+                'restaurant': {
+                    'title': '한국 레스토랑에서 주문하기',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '안녕하세요! 우리 식당에 오신 것을 환영해요. 몇 분이세요?',
+                            'expected_responses': ['명', '사람', '테이블', 'people', 'table'],
+                            'feedback_tips': '"2명이에요" 또는 "Table for 2 people please"라고 말해보세요'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '이쪽으로 오세요. 메뉴 드릴게요. 뭐 드시고 싶어요?',
+                            'expected_responses': ['메뉴', '추천', '뭐', '음식', 'menu', 'recommend'],
+                            'feedback_tips': '"메뉴 보여주세요" 또는 "What do you recommend?"'
+                        }
+                    ]
+                },
+                'hotel': {
+                    'title': '호텔 체크인',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '안녕하세요! 호텔에 오신 것을 환영합니다. 예약하셨나요?',
+                            'expected_responses': ['예약', '방', '체크인', 'reservation', 'room'],
+                            'feedback_tips': '"예약했어요" 또는 "I have a reservation"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '성함이 어떻게 되세요?',
+                            'expected_responses': ['이름', '성함', 'name', 'my name'],
+                            'feedback_tips': '"제 이름은 [이름]이에요" 또는 "My name is [name]"'
+                        }
+                    ]
+                },
+                'street': {
+                    'title': '길 묻기',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '안녕하세요! 길을 찾고 계세요?',
+                            'expected_responses': ['네', '길', '어디', '찾아요', 'yes', 'looking'],
+                            'feedback_tips': '"네, 길을 찾고 있어요" 또는 "Yes, I\'m looking for..."'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '어디로 가시려고 해요?',
+                            'expected_responses': ['명동', '강남', '역', '어떻게', 'how', 'where'],
+                            'feedback_tips': '"[장소]에 가고 싶어요" 또는 "How do I get to [place]?"'
+                        }
+                    ]
+                }
+            },
+            'en': {
+                'airport': {
+                    'title': 'Airport Check-in',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Good morning! Welcome to the airport. How can I help you today?',
+                            'expected_responses': ['check in', 'flight', 'need help', 'boarding pass'],
+                            'feedback_tips': 'Try saying: "I need to check in for my flight"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'May I see your passport and boarding pass?',
+                            'expected_responses': ['here', 'sure', 'course', 'you are'],
+                            'feedback_tips': 'A polite way to respond: "Here you are" or "Of course"'
+                        }
+                    ]
+                },
+                'restaurant': {
+                    'title': 'Restaurant Ordering',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Good evening! Welcome to our restaurant. Do you have a reservation?',
+                            'expected_responses': ['reservation', 'table', 'yes', 'under'],
+                            'feedback_tips': 'You can say: "Yes, under [your name]" or "Table for [number] please"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'Right this way. Here are your menus. Can I get you something to drink?',
+                            'expected_responses': ['water', 'wine', 'coffee', 'drink'],
+                            'feedback_tips': 'Simple responses work: "Water please" or "Coffee, please"'
+                        }
+                    ]
+                },
+                'hotel': {
+                    'title': 'Hotel Check-in',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Good afternoon! Welcome to our hotel. How can I help you?',
+                            'expected_responses': ['check in', 'reservation', 'room', 'booking'],
+                            'feedback_tips': 'Try saying: "I have a reservation" or "I\'d like to check in"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'May I have your name and ID please?',
+                            'expected_responses': ['here', 'sure', 'name is', 'id'],
+                            'feedback_tips': 'You can say: "Sure, here you are" or "My name is..."'
+                        }
+                    ]
+                },
+                'street': {
+                    'title': 'Asking for Directions',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'You look lost. Can I help you find something?',
+                            'expected_responses': ['yes', 'help', 'looking for', 'where'],
+                            'feedback_tips': 'Try saying: "Yes, I\'m looking for..." or "Can you help me find..."'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'Go straight ahead for two blocks, then turn left.',
+                            'expected_responses': ['thank you', 'thanks', 'got it', 'understand'],
+                            'feedback_tips': 'A polite response: "Thank you very much" or "I understand"'
+                        }
+                    ]
+                }
+            },
+            'ja': {
+                'airport': {
+                    'title': '空港でのチェックイン',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'おはようございます！空港へようこそ。何かお手伝いできることはありますか？',
+                            'expected_responses': ['チェックイン', 'フライト', '手伝い', '搭乗'],
+                            'feedback_tips': 'こう言ってみてください：「チェックインをお願いします」'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'パスポートと搭乗券を見せていただけますか？',
+                            'expected_responses': ['はい', 'どうぞ', 'こちら', 'お願い'],
+                            'feedback_tips': '丁寧な答え方：「はい、こちらです」または「どうぞ」'
+                        }
+                    ]
+                },
+                'restaurant': {
+                    'title': 'レストランでの注文',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'こんばんは！レストランへようこそ。ご予約はされていますか？',
+                            'expected_responses': ['予約', 'テーブル', 'はい', '名前'],
+                            'feedback_tips': '「はい、予約しています」または「[名前]で予約を取りました」'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'こちらへどうぞ。メニューをお持ちします。お飲み物はいかがですか？',
+                            'expected_responses': ['水', 'ビール', 'ワイン', '飲み物'],
+                            'feedback_tips': '「お水をお願いします」または「ビールをください」'
+                        }
+                    ]
+                },
+                'hotel': {
+                    'title': 'ホテルでのチェックイン',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'こんにちは！ホテルへようこそ。何かお手伝いできることはありますか？',
+                            'expected_responses': ['チェックイン', '予約', '部屋', '宿泊'],
+                            'feedback_tips': '「チェックインをお願いします」または「予約を確認してください」'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'お名前とIDを拝見できますでしょうか？',
+                            'expected_responses': ['はい', 'どうぞ', '名前', 'こちら'],
+                            'feedback_tips': '「はい、こちらです」または「私の名前は...です」'
+                        }
+                    ]
+                },
+                'street': {
+                    'title': '道案内',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '道に迷われたようですね。何かお探しですか？',
+                            'expected_responses': ['探している', 'どこ', '手伝い', '道'],
+                            'feedback_tips': '「[場所]を探しています」または「道を教えてください」'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'どちらへ行かれますか？',
+                            'expected_responses': ['駅', '銀座', 'どうやって', '行き方'],
+                            'feedback_tips': '「[場所]に行きたいです」または「行き方を教えてください」'
+                        }
+                    ]
+                }
+            },
+            'zh': {
+                'airport': {
+                    'title': '机场值机',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '早上好！欢迎来到机场。我能为您做些什么？',
+                            'expected_responses': ['值机', '航班', '帮助', '登机'],
+                            'feedback_tips': '可以这样说："我需要办理值机手续"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '请出示您的护照和登机牌？',
+                            'expected_responses': ['这里', '好的', '给您', '请看'],
+                            'feedback_tips': '礼貌的回答："好的，给您" 或 "请看"'
+                        }
+                    ]
+                },
+                'restaurant': {
+                    'title': '餐厅点餐',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '晚上好！欢迎来到我们餐厅。您有预订吗？',
+                            'expected_responses': ['预订', '桌子', '有', '名字'],
+                            'feedback_tips': '可以说："有预订，在[姓名]名下" 或 "要[人数]人的桌子"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '请这边走。这是菜单。您想喝点什么？',
+                            'expected_responses': ['水', '茶', '啤酒', '饮料'],
+                            'feedback_tips': '简单回答："请给我水" 或 "我要茶"'
+                        }
+                    ]
+                },
+                'hotel': {
+                    'title': '酒店入住',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '下午好！欢迎来到我们酒店。我能为您做些什么？',
+                            'expected_responses': ['入住', '预订', '房间', '登记'],
+                            'feedback_tips': '"我要办理入住手续" 或 "我有预订"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '请出示您的姓名和身份证件？',
+                            'expected_responses': ['这里', '好的', '姓名', '身份证'],
+                            'feedback_tips': '"好的，这里" 或 "我的名字是..."'
+                        }
+                    ]
+                },
+                'street': {
+                    'title': '问路',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': '您看起来迷路了。我能帮您找什么地方吗？',
+                            'expected_responses': ['找', '哪里', '帮助', '路'],
+                            'feedback_tips': '"我在找[地点]" 或 "请告诉我路怎么走"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': '您要去哪里？',
+                            'expected_responses': ['天安门', '北京站', '怎么走', '地铁'],
+                            'feedback_tips': '"我要去[地点]" 或 "怎么走最快？"'
+                        }
+                    ]
+                }
+            },
+            'fr': {
+                'airport': {
+                    'title': 'Enregistrement à l\'aéroport',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Bonjour ! Bienvenue à l\'aéroport. Comment puis-je vous aider aujourd\'hui ?',
+                            'expected_responses': ['enregistrement', 'vol', 'aide', 'embarquement'],
+                            'feedback_tips': 'Essayez de dire : "J\'aimerais m\'enregistrer pour mon vol"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'Puis-je voir votre passeport et votre carte d\'embarquement ?',
+                            'expected_responses': ['voici', 'bien sûr', 'tenez', 'voilà'],
+                            'feedback_tips': 'Une façon polie de répondre : "Voici" ou "Bien sûr"'
+                        }
+                    ]
+                },
+                'restaurant': {
+                    'title': 'Commande au restaurant',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Bonsoir ! Bienvenue dans notre restaurant. Avez-vous une réservation ?',
+                            'expected_responses': ['réservation', 'table', 'oui', 'nom'],
+                            'feedback_tips': 'Vous pouvez dire : "Oui, au nom de [votre nom]" ou "Table pour [nombre] personnes"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'Par ici, s\'il vous plaît. Voici les menus. Que puis-je vous offrir à boire ?',
+                            'expected_responses': ['eau', 'vin', 'café', 'boisson'],
+                            'feedback_tips': 'Réponses simples : "De l\'eau, s\'il vous plaît" ou "Un café"'
+                        }
+                    ]
+                },
+                'hotel': {
+                    'title': 'Enregistrement à l\'hôtel',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Bon après-midi ! Bienvenue dans notre hôtel. Comment puis-je vous aider ?',
+                            'expected_responses': ['enregistrement', 'réservation', 'chambre', 'inscription'],
+                            'feedback_tips': '"J\'aimerais m\'enregistrer" ou "J\'ai une réservation"'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'Puis-je avoir votre nom et votre pièce d\'identité ?',
+                            'expected_responses': ['voici', 'bien sûr', 'nom', 'identité'],
+                            'feedback_tips': '"Bien sûr, voici" ou "Mon nom est..."'
+                        }
+                    ]
+                },
+                'street': {
+                    'title': 'Demander son chemin',
+                    'steps': [
+                        {
+                            'step': 1,
+                            'ai_message': 'Vous semblez perdu. Puis-je vous aider à trouver quelque chose ?',
+                            'expected_responses': ['oui', 'aide', 'cherche', 'où'],
+                            'feedback_tips': '"Oui, je cherche..." ou "Pouvez-vous m\'aider à trouver..."'
+                        },
+                        {
+                            'step': 2,
+                            'ai_message': 'Où voulez-vous aller ?',
+                            'expected_responses': ['Louvre', 'gare', 'comment', 'métro'],
+                            'feedback_tips': '"Je veux aller au [lieu]" ou "Comment aller à..."'
+                        }
+                    ]
+                }
+            }
+        }
+
+        # 언어별 템플릿 선택
+        templates = scenario_templates.get(language, scenario_templates['en'])
+        template = templates.get(situation, templates.get('airport', {
+            'title': f'{situation.title()} Conversation',
+            'steps': [
+                {
+                    'step': 1,
+                    'ai_message': f'Hello! Let\'s practice {situation} conversation.',
+                    'expected_responses': ['hello', 'hi', 'good'],
+                    'feedback_tips': 'Try greeting back politely'
+                }
+            ]
+        }))
+
+        return template
+
+    def _analyze_user_response(
+            self,
+            user_message: str,
+            expected_responses: List[str],
+            feedback_tip: str
+    ) -> Dict[str, Any]:
+        """사용자 응답 분석 및 피드백 생성 - 개선된 버전"""
+
+        user_lower = user_message.lower().strip()
+
+        # 정확도 계산 (개선된 키워드 매칭)
+        accuracy_score = 0
+        matched_keywords = []
+
+        # 각 기대 응답과 사용자 입력 비교
+        for expected in expected_responses:
+            expected_words = expected.lower().split()
+            for word in expected_words:
+                if len(word) > 2 and word in user_lower:  # 3글자 이상의 의미있는 단어만
+                    accuracy_score += 1
+                    matched_keywords.append(word)
+
+        # 부분 매칭도 고려 (더 유연한 평가)
+        partial_matches = 0
+        for expected in expected_responses:
+            if any(part in user_lower for part in expected.lower().split() if len(part) > 2):
+                partial_matches += 1
+
+        # 최종 점수 계산
+        total_score = accuracy_score + (partial_matches * 0.5)
+
+        # 피드백 생성 (기준 완화)
+        if total_score >= 1.5 or len(matched_keywords) >= 2:
+            feedback_level = "excellent"
+            message = "Perfect! Your response was very natural."
+        elif total_score >= 0.5 or len(matched_keywords) >= 1:
+            feedback_level = "good"
+            message = "Good response! Try to be more specific next time."
+        else:
+            feedback_level = "needs_improvement"
+            message = f"Try this instead: {feedback_tip}"
+
+        return {
+            "level": feedback_level,
+            "message": message,
+            "accuracy": total_score,
+            "grammar_score": 0.9,  # 기본값
+            "matched_keywords": matched_keywords,
+            "suggestions": [feedback_tip] if feedback_level == "needs_improvement" else []
+        }
+
+    def _generate_scenario_summary(self, scenario_data: Dict) -> Dict[str, Any]:
+        """시나리오 완료 후 요약 생성"""
+
+        responses = scenario_data['user_responses']
+        total_responses = len(responses)
+
+        if total_responses == 0:
+            return {"message": "No responses recorded"}
+
+        # 전체 정확도 계산
+        total_accuracy = sum(r['feedback']['accuracy'] for r in responses)
+        average_accuracy = total_accuracy / total_responses
+
+        # 레벨 분포
+        level_counts = {}
+        for response in responses:
+            level = response['feedback']['level']
+            level_counts[level] = level_counts.get(level, 0) + 1
+
+        return {
+            "total_responses": total_responses,
+            "average_accuracy": round(average_accuracy, 2),
+            "level_distribution": level_counts,
+            "completed_at": datetime.now().isoformat(),
+            "duration_minutes": 5  # 실제로는 계산해야 함
+        }
+
+    def _add_default_scenarios(self):
+        """기본 시나리오 추가 (데이터 없을 때)"""
+
+        # 기존 데이터 유지하면서 기본값 추가
+        default_situations = ['airport', 'restaurant', 'hotel', 'street']
+
+        for situation in default_situations:
+            if situation not in self.conversation_scenarios:
+                self.conversation_scenarios[situation] = {
+                    'scenarios': [],
+                    'dialogues': [],
+                    'common_phrases': []
+                }
+
+    def _get_default_scenario(self, situation: str, difficulty: str) -> Dict:
+        """기본 시나리오 반환"""
+
+        return {
+            'dialogue': f'Basic {situation} conversation scenario',
+            'relevance_score': 1,
+            'key_phrases': ['hello', 'please', 'thank you'],
+            'difficulty': difficulty
+        }
+
+    def get_available_situations(self) -> List[str]:
+        """사용 가능한 상황 목록"""
+        return list(self.conversation_scenarios.keys())
+
+    def get_session_status(self, session_id: str) -> Dict[str, Any]:
+        """세션 상태 조회"""
+
+        # OpenAI 세션 확인
+        if session_id in self.openai_sessions:
+            session_config = self.openai_sessions[session_id]
+            if openai_service:
+                conversation_summary = openai_service.get_conversation_summary(session_id)
+            else:
+                conversation_summary = {"conversation_length": 0}
+
+            return {
+                "exists": True,
+                "mode": session_config['mode'],
+                "situation": session_config['situation'],
+                "difficulty": session_config['difficulty'],
+                "language": session_config['language'],
+                "turn_count": session_config['turn_count'],
+                "conversation_length": conversation_summary['conversation_length'],
+                "started_at": session_config['started_at'],
+                "last_activity": session_config.get('last_activity', session_config['started_at']),
+                "data_collection": bool(session_config.get('user_id') and self.data_collector)
+            }
+
+        # 시나리오 세션 확인
+        elif session_id in self.current_scenarios:
+            scenario_data = self.current_scenarios[session_id]
+
+            return {
+                "exists": True,
+                "mode": scenario_data.get('mode', self.SCENARIO_MODE),
+                "situation": scenario_data['situation'],
+                "difficulty": scenario_data['difficulty'],
+                "language": scenario_data.get('language', 'en'),
+                "current_step": scenario_data['current_step'] + 1,
+                "total_steps": len(scenario_data['scenario']['steps']),
+                "responses_count": len(scenario_data['user_responses']),
+                "started_at": scenario_data['started_at'],
+                "data_collection": bool(self.data_collector)
+            }
+
+        else:
+            return {"exists": False}
+
+    async def end_conversation(self, session_id: str) -> Dict[str, Any]:
+        """대화 세션 종료 (데이터 수집 포함)"""
+
+        try:
+            summary = None
+
+            # OpenAI 세션 종료
+            if session_id in self.openai_sessions:
+                session_config = self.openai_sessions[session_id]
+                if openai_service:
+                    summary = openai_service.get_conversation_summary(session_id)
+                    openai_service.clear_conversation_history(session_id)
+                del self.openai_sessions[session_id]
+
+                # 데이터 수집: 세션 종료 기록
+                if self.data_collector:
+                    await self.data_collector.end_session(session_id, "completed")
+
+            # 시나리오 세션 종료
+            elif session_id in self.current_scenarios:
+                scenario_data = self.current_scenarios[session_id]
+                summary = self._generate_scenario_summary(scenario_data)
+                del self.current_scenarios[session_id]
+
+                # 데이터 수집: 세션 종료 기록
+                if self.data_collector:
+                    await self.data_collector.end_session(session_id, "completed")
+
+            # 응답 시간 측정 데이터 정리
+            if session_id in self.response_start_times:
+                del self.response_start_times[session_id]
+
+            return {
+                "success": True,
+                "message": "대화 세션이 종료되었습니다.",
+                "summary": summary,
+                "ended_at": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"세션 종료 오류: {e}")
+            return {
+                "success": False,
+                "error": f"세션 종료 중 오류: {str(e)}"
+            }
+
+    async def get_openai_status(self) -> Dict[str, Any]:
+        """OpenAI 서비스 상태 확인"""
+
+        if openai_service:
+            return await openai_service.test_connection()
+        else:
+            return {
+                "connected": False,
+                "error": "OpenAI 서비스가 사용할 수 없습니다"
+            }
+
+# 전역 인스턴스
+enhanced_conversation_service = EnhancedConversationService()
+conversation_ai_service = enhanced_conversation_service  # 호환성을 위한 별칭
